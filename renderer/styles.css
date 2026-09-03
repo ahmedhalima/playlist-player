@@ -116,6 +116,42 @@ button {
   color: var(--text-muted);
 }
 
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quality-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.quality-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 8px 9px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.quality-select:focus {
+  outline: none;
+  border-color: var(--gold-dim);
+}
+
+.quality-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 /* ---------- Main ---------- */
 
 .main {

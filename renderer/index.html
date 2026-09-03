@@ -20,6 +20,20 @@
       <button id="newPlaylistBtn" class="btn btn-new-playlist">+ New playlist</button>
 
       <div id="playlistNav" class="playlist-nav"></div>
+
+      <div class="sidebar-footer">
+        <label for="qualitySelect" class="quality-label">Playback quality</label>
+        <select id="qualitySelect" class="quality-select">
+          <option value="tiny">144p</option>
+          <option value="small">240p</option>
+          <option value="medium" selected>360p</option>
+          <option value="large">480p</option>
+          <option value="hd720">720p</option>
+          <option value="hd1080">1080p</option>
+          <option value="default">Auto</option>
+        </select>
+        <p class="quality-hint">Applies to YouTube videos. YouTube may raise this automatically depending on your connection.</p>
+      </div>
     </aside>
 
     <main class="main">

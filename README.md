@@ -9,6 +9,7 @@ A small cross-platform desktop app (Electron) for building and playing playlists
 - Add local video files (mp4, mov, mkv, webm, etc.) from your computer via a native file picker
 - Edit or delete any video, reorder with the up/down arrows
 - Click any video to play it in the built-in player — YouTube links use the YouTube player, local files use a native video player, and you can mix both in the same playlist
+- Set a preferred playback quality (144p–1080p, or Auto) at the bottom of the sidebar; it defaults to 360p and applies to all YouTube videos
 - Prev / Play-Pause / Next transport controls
 - Repeat modes per playlist, cycled with one button: **Off → All → One**
   - **Off** — playlist stops after the last video
@@ -55,4 +56,5 @@ Playlists are stored as JSON in Electron's per-OS app-data folder, e.g.:
 - Playback of YouTube links uses the official YouTube IFrame Player API, so an internet connection is required for those (same as visiting YouTube in a browser). Local files play back fully offline.
 - Supported YouTube URL formats: `youtube.com/watch?v=...`, `youtu.be/...`, `youtube.com/embed/...`, `youtube.com/shorts/...`.
 - Local videos are referenced by file path, not copied into the app — if you move or rename the original file, re-link it from the video's edit (✎) menu.
+- The playback quality setting is sent to YouTube as a *request*, not a hard rule — YouTube's player is allowed to raise it automatically depending on your connection speed and the player size, especially in fullscreen. It's re-asserted on every load and state change, but YouTube has the final say for embedded playback.
 - The app serves its own UI from `http://127.0.0.1` (a local server started on a random free port, only reachable from your own machine) instead of loading it as a `file://` page. This is required for YouTube's embedded player to work correctly in a desktop app — without it, YouTube playback fails with "Error 153: video player configuration error".

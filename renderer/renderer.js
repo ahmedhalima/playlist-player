@@ -3,7 +3,7 @@
 
   // ---------- State ----------
 
-  let state = { playlists: [] };
+  let state = { playlists: [], settings: { quality: 'medium' } };
   let activePlaylistId = null;
   let currentVideoIndex = -1;      // index within the active playlist's videos
   let currentPlayerType = null;    // 'youtube' | 'local' | null
@@ -67,6 +67,10 @@
 
   function getActivePlaylist() {
     return state.playlists.find(p => p.id === activePlaylistId) || null;
+  }
+
+  function getPreferredQuality() {
+    return (state.settings && state.settings.quality) || 'medium';
   }
 
   function localVideoSrc(filePath) {
@@ -369,7 +373,7 @@
       video.videoId = newVideoId;
 
       if (editingIndex === currentVideoIndex && currentPlayerType === 'youtube' && ytPlayer && ytReady) {
-        ytPlayer.loadVideoById(newVideoId);
+        ytPlayer.loadVideoById({ videoId: newVideoId, suggestedQuality: getPreferredQuality() });
       }
     }
 
@@ -426,7 +430,7 @@
       currentPlayerType = 'youtube';
 
       if (ytReady && ytPlayer) {
-        ytPlayer.loadVideoById(video.videoId);
+        ytPlayer.loadVideoById({ videoId: video.videoId, suggestedQuality: getPreferredQuality() });
         ytPlayer.playVideo();
       } else {
         pendingVideoIdToLoad = video.videoId;
@@ -516,7 +520,7 @@
         onReady: () => {
           ytReady = true;
           if (pendingVideoIdToLoad) {
-            ytPlayer.loadVideoById(pendingVideoIdToLoad);
+            ytPlayer.loadVideoById({ videoId: pendingVideoIdToLoad, suggestedQuality: getPreferredQuality() });
             pendingVideoIdToLoad = null;
           }
         },
@@ -524,6 +528,11 @@
           if (currentPlayerType !== 'youtube') return;
           if (event.data === YT.PlayerState.PLAYING) updatePlayPauseIcon(true);
           if (event.data === YT.PlayerState.PAUSED) updatePlayPauseIcon(false);
+          if (event.data === YT.PlayerState.BUFFERING || event.data === YT.PlayerState.PLAYING) {
+            // YouTube can silently override the requested quality once a video
+            // actually starts streaming, so re-assert our preference here too.
+            try { ytPlayer.setPlaybackQuality(getPreferredQuality()); } catch (e) {}
+          }
           if (event.data === YT.PlayerState.ENDED) {
             updatePlayPauseIcon(false);
             playNext(true);
@@ -572,6 +581,15 @@
     document.getElementById('editSaveBtn').addEventListener('click', saveEditModal);
     document.getElementById('editBrowseBtn').addEventListener('click', browseForReplacementFile);
 
+    document.getElementById('qualitySelect').addEventListener('change', (e) => {
+      if (!state.settings) state.settings = {};
+      state.settings.quality = e.target.value;
+      scheduleSave();
+      if (currentPlayerType === 'youtube' && ytPlayer && ytReady) {
+        try { ytPlayer.setPlaybackQuality(e.target.value); } catch (err) {}
+      }
+    });
+
     const local = localPlayerEl();
     local.addEventListener('play', () => { if (currentPlayerType === 'local') updatePlayPauseIcon(true); });
     local.addEventListener('pause', () => { if (currentPlayerType === 'local') updatePlayPauseIcon(false); });
@@ -583,12 +601,15 @@
   async function init() {
     state = await window.api.loadData();
     if (!state || !Array.isArray(state.playlists)) state = { playlists: [] };
+    if (!state.settings) state.settings = {};
+    if (!state.settings.quality) state.settings.quality = 'medium';
     state.playlists.forEach(p => {
       if (!p.repeatMode) p.repeatMode = 'off';
       p.videos.forEach(v => { if (!v.type) v.type = 'youtube'; });
     });
 
     wireEvents();
+    document.getElementById('qualitySelect').value = state.settings.quality;
     renderSidebar();
     renderPlaylistPanel();
   }
