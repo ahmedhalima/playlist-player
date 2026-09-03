@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube.com; img-src 'self' https: data:; media-src 'self' local-video: blob:; connect-src 'self' https://www.youtube.com https://noembed.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;">
+<title>Reel List</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">Reel List</span>
+      </div>
+
+      <button id="newPlaylistBtn" class="btn btn-new-playlist">+ New playlist</button>
+
+      <div id="playlistNav" class="playlist-nav"></div>
+    </aside>
+
+    <main class="main">
+
+      <section class="player-zone">
+        <div class="player-frame">
+          <div id="player"></div>
+          <video id="localPlayer" class="local-player" playsinline controls></video>
+          <div id="playerPlaceholder" class="player-placeholder">
+            <p>Pick a video from the queue to start playing.</p>
+          </div>
+        </div>
+
+        <div class="transport">
+          <button id="prevBtn" class="transport-btn" title="Previous">⏮</button>
+          <button id="playPauseBtn" class="transport-btn transport-btn-primary" title="Play/Pause">▶</button>
+          <button id="nextBtn" class="transport-btn" title="Next">⏭</button>
+          <button id="repeatBtn" class="repeat-btn" title="Cycle repeat mode">Repeat: Off</button>
+          <div class="now-playing">
+            <span id="nowPlayingLabel">Nothing playing</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="queue-zone">
+        <div id="emptyState" class="empty-state">
+          <h2>No playlist selected</h2>
+          <p>Create a playlist on the left, or select one, to start adding videos.</p>
+        </div>
+
+        <div id="playlistPanel" class="playlist-panel" hidden>
+          <div class="playlist-header">
+            <div class="title-row">
+              <h2 id="playlistTitle"></h2>
+              <button id="renamePlaylistBtn" class="icon-btn" title="Rename playlist">✎</button>
+            </div>
+            <button id="deletePlaylistBtn" class="btn btn-danger-ghost">Delete playlist</button>
+          </div>
+
+          <form id="renamePlaylistForm" class="rename-playlist-form" hidden>
+            <input id="renamePlaylistInput" type="text" maxlength="80" />
+            <button type="submit" class="btn btn-add">Save</button>
+            <button type="button" id="renameCancelBtn" class="btn btn-ghost">Cancel</button>
+          </form>
+
+          <form id="addVideoForm" class="add-video-form">
+            <input id="videoUrlInput" type="text" placeholder="Paste a YouTube URL…" />
+            <input id="videoTitleInput" type="text" placeholder="Title (optional — auto-filled if left blank)" />
+            <button type="submit" class="btn btn-add">+ Add video</button>
+          </form>
+
+          <div class="add-local-row">
+            <button id="addLocalBtn" type="button" class="btn btn-add-local">+ Add local video file…</button>
+            <span class="add-local-hint">MP4, MOV, MKV, WebM, and more</span>
+          </div>
+
+          <ol id="videoList" class="video-list"></ol>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="editModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3>Edit video</h3>
+      <label>Title
+        <input id="editTitleInput" type="text" />
+      </label>
+      <label id="editUrlLabel">URL
+        <input id="editUrlInput" type="text" />
+      </label>
+      <button id="editBrowseBtn" type="button" class="btn btn-ghost" hidden>Choose a different file…</button>
+      <div class="modal-actions">
+        <button id="editCancelBtn" class="btn btn-ghost">Cancel</button>
+        <button id="editSaveBtn" class="btn btn-add">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
