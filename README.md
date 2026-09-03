@@ -1,4 +1,4 @@
-# Reel List
+# Playlist Player
 
 A small cross-platform desktop app (Electron) for building and playing playlists of YouTube video links.
 
@@ -47,9 +47,9 @@ Run this command on the target OS (or use electron-builder's cross-build options
 ## Where your data lives
 
 Playlists are stored as JSON in Electron's per-OS app-data folder, e.g.:
-- macOS: `~/Library/Application Support/Reel List/reel-list-data.json`
-- Windows: `%APPDATA%\Reel List\reel-list-data.json`
-- Linux: `~/.config/Reel List/reel-list-data.json`
+- macOS: `~/Library/Application Support/Playlist Player/playlist-player-data.json`
+- Windows: `%APPDATA%\Playlist Player\playlist-player-data.json`
+- Linux: `~/.config/Playlist Player/playlist-player-data.json`
 
 ## Notes
 

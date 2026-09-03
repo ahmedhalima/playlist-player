@@ -1,10 +1,10 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
-const { pathToFileURL } = require('url');
+const { Readable } = require('stream');
 
-const DATA_FILE = path.join(app.getPath('userData'), 'reel-list-data.json');
+const DATA_FILE = path.join(app.getPath('userData'), 'playlist-player-data.json');
 const RENDERER_DIR = path.join(__dirname, 'renderer');
 
 const MIME_TYPES = {
@@ -16,6 +16,23 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon'
 };
+
+const VIDEO_MIME_TYPES = {
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/x-m4v',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
+  '.mov': 'video/quicktime',
+  '.avi': 'video/x-msvideo',
+  '.wmv': 'video/x-ms-wmv',
+  '.flv': 'video/x-flv',
+  '.ogv': 'video/ogg'
+};
+
+function videoMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return VIDEO_MIME_TYPES[ext] || 'application/octet-stream';
+}
 
 // Local video files are streamed through this custom scheme instead of file://,
 // because YouTube (and Chromium's media loader) treat file:// origins as
@@ -125,16 +142,72 @@ async function createWindow() {
 
 app.whenReady().then(() => {
   // Serve local video files through our custom scheme so <video> elements
-  // can stream them (with proper Range support for seeking) regardless of
-  // the page's own origin.
-  protocol.handle('local-video', (request) => {
+  // can stream them regardless of the page's own origin. We handle byte
+  // ranges ourselves here — Electron's net.fetch() to a file:// URL does
+  // NOT forward the incoming Range header (a known Electron limitation,
+  // see electron/electron#38749), which is what breaks the seek bar:
+  // without partial-content responses, Chromium can't jump to an
+  // arbitrary point in the file.
+  protocol.handle('local-video', async (request) => {
     try {
       const reqUrl = new URL(request.url);
       const filePath = decodeURIComponent(reqUrl.searchParams.get('path') || '');
       if (!filePath) {
         return new Response('Missing path', { status: 400 });
       }
-      return net.fetch(pathToFileURL(filePath).toString());
+
+      let stat;
+      try {
+        stat = await fs.promises.stat(filePath);
+      } catch (err) {
+        return new Response('File not found: ' + filePath, { status: 404 });
+      }
+
+      const fileSize = stat.size;
+      const mimeType = videoMimeType(filePath);
+      const rangeHeader = request.headers.get('range');
+
+      if (rangeHeader) {
+        const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+        let start = match && match[1] !== '' ? parseInt(match[1], 10) : 0;
+        let end = match && match[2] !== '' ? parseInt(match[2], 10) : fileSize - 1;
+
+        if (Number.isNaN(start) || start < 0) start = 0;
+        if (Number.isNaN(end) || end > fileSize - 1) end = fileSize - 1;
+
+        if (start > end || start >= fileSize) {
+          return new Response(null, {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${fileSize}` }
+          });
+        }
+
+        const chunkSize = end - start + 1;
+        const nodeStream = fs.createReadStream(filePath, { start, end });
+
+        return new Response(Readable.toWeb(nodeStream), {
+          status: 206,
+          headers: {
+            'Content-Type': mimeType,
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(chunkSize)
+          }
+        });
+      }
+
+      // No Range header: serve the whole file, but still advertise range
+      // support so the player knows it's allowed to ask for byte ranges
+      // (which is what enables scrubbing on the progress bar).
+      const nodeStream = fs.createReadStream(filePath);
+      return new Response(Readable.toWeb(nodeStream), {
+        status: 200,
+        headers: {
+          'Content-Type': mimeType,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': String(fileSize)
+        }
+      });
     } catch (err) {
       return new Response('Error reading file: ' + String(err), { status: 500 });
     }

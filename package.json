@@ -1,7 +1,8 @@
 {
-  "name": "reel-list",
+  "name": "playlist-player",
+  "productName": "Playlist Player",
   "version": "1.0.0",
-  "description": "A desktop app for building and playing YouTube video playlists.",
+  "description": "A desktop app for building and playing playlists of YouTube and local videos.",
   "main": "main.js",
   "author": "",
   "license": "MIT",
@@ -14,8 +15,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.reellist.app",
-    "productName": "Reel List",
+    "appId": "com.playlistplayer.app",
+    "productName": "Playlist Player",
     "directories": {
       "output": "dist"
     },
