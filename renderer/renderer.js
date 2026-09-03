@@ -9,6 +9,7 @@
   let currentPlayerType = null;    // 'youtube' | 'local' | null
   let ytPlayer = null;
   let ytReady = false;
+  let ytLoadFailed = false;
   let pendingVideoIdToLoad = null;
   let saveTimer = null;
   let editingIndex = -1;
@@ -75,6 +76,18 @@
 
   function localVideoSrc(filePath) {
     return 'local-video://stream?path=' + encodeURIComponent(filePath);
+  }
+
+  const DEFAULT_PLACEHOLDER_TEXT = 'Pick a video from the queue to start playing.';
+
+  function showPlaceholder(text, showRetry) {
+    document.getElementById('playerPlaceholderText').textContent = text || DEFAULT_PLACEHOLDER_TEXT;
+    document.getElementById('playerRetryBtn').hidden = !showRetry;
+    document.getElementById('playerPlaceholder').style.display = 'flex';
+  }
+
+  function hidePlaceholder() {
+    document.getElementById('playerPlaceholder').style.display = 'none';
   }
 
   // ---------- Rendering ----------
@@ -386,7 +399,7 @@
   // ---------- Player ----------
 
   function resetPlayerToPlaceholder() {
-    document.getElementById('playerPlaceholder').style.display = 'flex';
+    showPlaceholder(DEFAULT_PLACEHOLDER_TEXT, false);
     document.getElementById('player').style.display = '';
     localPlayerEl().style.display = 'none';
     currentPlayerType = null;
@@ -407,14 +420,13 @@
     currentVideoIndex = index;
     const video = playlist.videos[index];
 
-    document.getElementById('playerPlaceholder').style.display = 'none';
-
     if (video.type === 'local') {
       // Stop any YouTube playback and switch views to the local <video> element.
       if (ytPlayer && ytReady) {
         try { ytPlayer.stopVideo(); } catch (e) {}
       }
       document.getElementById('player').style.display = 'none';
+      hidePlaceholder();
       const el = localPlayerEl();
       el.style.display = 'block';
       el.src = localVideoSrc(video.filePath);
@@ -426,14 +438,21 @@
       const el = localPlayerEl();
       el.pause();
       el.style.display = 'none';
-      document.getElementById('player').style.display = '';
       currentPlayerType = 'youtube';
 
       if (ytReady && ytPlayer) {
+        document.getElementById('player').style.display = '';
+        hidePlaceholder();
         ytPlayer.loadVideoById({ videoId: video.videoId, suggestedQuality: getPreferredQuality() });
         ytPlayer.playVideo();
       } else {
         pendingVideoIdToLoad = video.videoId;
+        document.getElementById('player').style.display = 'none';
+        if (ytLoadFailed) {
+          showPlaceholder("Couldn't load the YouTube player. Check your internet connection, then retry.", true);
+        } else {
+          showPlaceholder('Loading the YouTube player…', false);
+        }
       }
     }
 
@@ -510,7 +529,16 @@
     updateRepeatButton();
   }
 
-  // YouTube IFrame API callback (must be a global)
+  const YT_ERROR_MESSAGES = {
+    2: "That video's link looks invalid.",
+    5: "This video can't be played here (HTML5 player error).",
+    100: 'This video was not found — it may have been removed or made private.',
+    101: "This video's owner doesn't allow it to be played in embedded players.",
+    150: "This video's owner doesn't allow it to be played in embedded players."
+  };
+
+  // YouTube IFrame API callback (must be a global — the API script calls this
+  // once it's finished loading, however long that takes)
   window.onYouTubeIframeAPIReady = function () {
     ytPlayer = new YT.Player('player', {
       width: '100%',
@@ -519,7 +547,10 @@
       events: {
         onReady: () => {
           ytReady = true;
+          ytLoadFailed = false;
           if (pendingVideoIdToLoad) {
+            document.getElementById('player').style.display = '';
+            hidePlaceholder();
             ytPlayer.loadVideoById({ videoId: pendingVideoIdToLoad, suggestedQuality: getPreferredQuality() });
             pendingVideoIdToLoad = null;
           }
@@ -537,10 +568,46 @@
             updatePlayPauseIcon(false);
             playNext(true);
           }
+        },
+        onError: (event) => {
+          if (currentPlayerType !== 'youtube') return;
+          const message = YT_ERROR_MESSAGES[event.data] || ('This video can\'t be played here (error ' + event.data + ').');
+          document.getElementById('player').style.display = 'none';
+          showPlaceholder(message, false);
+          updatePlayPauseIcon(false);
         }
       }
     });
   };
+
+  function loadYouTubeAPI() {
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    script.onerror = () => {
+      ytLoadFailed = true;
+      if (currentPlayerType === 'youtube' && !ytReady) {
+        showPlaceholder("Couldn't reach YouTube. Check your internet connection, then retry.", true);
+      }
+    };
+    document.head.appendChild(script);
+
+    // Watchdog: if the API never calls back (network issue, firewall, etc.)
+    // surface that instead of leaving the player area permanently blank.
+    setTimeout(() => {
+      if (!ytReady) {
+        ytLoadFailed = true;
+        if (currentPlayerType === 'youtube') {
+          showPlaceholder("Couldn't load the YouTube player. Check your internet connection, then retry.", true);
+        }
+      }
+    }, 10000);
+  }
+
+  function retryYouTubeLoad() {
+    ytLoadFailed = false;
+    showPlaceholder('Loading the YouTube player…', false);
+    loadYouTubeAPI();
+  }
 
   // ---------- Wiring ----------
 
@@ -580,6 +647,7 @@
     document.getElementById('editCancelBtn').addEventListener('click', closeEditModal);
     document.getElementById('editSaveBtn').addEventListener('click', saveEditModal);
     document.getElementById('editBrowseBtn').addEventListener('click', browseForReplacementFile);
+    document.getElementById('playerRetryBtn').addEventListener('click', retryYouTubeLoad);
 
     document.getElementById('qualitySelect').addEventListener('change', (e) => {
       if (!state.settings) state.settings = {};
@@ -612,6 +680,7 @@
     document.getElementById('qualitySelect').value = state.settings.quality;
     renderSidebar();
     renderPlaylistPanel();
+    loadYouTubeAPI();
   }
 
   document.addEventListener('DOMContentLoaded', init);
