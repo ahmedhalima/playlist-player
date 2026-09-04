@@ -6,7 +6,7 @@
   let state = { playlists: [], settings: { quality: 'medium' } };
   let activePlaylistId = null;
   let currentVideoIndex = -1;      // index within the active playlist's videos
-  let currentPlayerType = null;    // 'youtube' | 'local' | null
+  let currentPlayerType = null;    // 'youtube' | 'local' | 'embed' | null
   let ytPlayer = null;
   let ytReady = false;
   let ytLoadFailed = false;
@@ -17,8 +17,10 @@
 
   const REPEAT_MODES = ['off', 'all', 'one'];
   const REPEAT_LABELS = { off: 'Repeat: Off', all: 'Repeat: All', one: 'Repeat: One' };
+  const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v', 'wmv', 'flv', 'ogv'];
 
   const localPlayerEl = () => document.getElementById('localPlayer');
+  const embedPlayerEl = () => document.getElementById('embedPlayer');
 
   // ---------- Helpers ----------
 
@@ -26,7 +28,7 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
-  function extractVideoId(url) {
+  function extractYouTubeId(url) {
     if (!url) return null;
     const patterns = [
       /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
@@ -40,6 +42,50 @@
       if (m) return m[1];
     }
     return null;
+  }
+
+  function isFacebookUrl(url) {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      return host.endsWith('facebook.com') || host.endsWith('fb.watch');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isInstagramUrl(url) {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      return host.endsWith('instagram.com');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Figures out which provider a pasted URL belongs to, if any.
+  function classifyWebUrl(url) {
+    const ytId = extractYouTubeId(url);
+    if (ytId) return { type: 'youtube', videoId: ytId };
+    if (isFacebookUrl(url)) return { type: 'facebook' };
+    if (isInstagramUrl(url)) return { type: 'instagram' };
+    return null;
+  }
+
+  function looksLikeLocalVideoPath(line) {
+    const m = line.match(/\.([a-zA-Z0-9]+)$/);
+    if (!m) return false;
+    return VIDEO_EXTENSIONS.includes(m[1].toLowerCase());
+  }
+
+  function buildEmbedSrc(video) {
+    if (video.type === 'facebook') {
+      return 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(video.url) + '&show_text=false&autoplay=true';
+    }
+    if (video.type === 'instagram') {
+      const base = video.url.split('?')[0].replace(/\/$/, '');
+      return base + '/embed/captioned/';
+    }
+    return '';
   }
 
   function baseNameWithoutExt(filePath) {
@@ -78,6 +124,18 @@
     return 'local-video://stream?path=' + encodeURIComponent(filePath);
   }
 
+  function exitFullscreenIfActive() {
+    // If a video is in HTML5 fullscreen when we swap players (e.g. auto-
+    // advancing from a local file to a YouTube video or vice versa), hiding
+    // the old element forces the browser to silently drop element-level
+    // fullscreen — but Electron's window-level fullscreen (which mirrors it)
+    // doesn't get told to exit, leaving a fullscreen window wrapped around a
+    // normal-sized player. Exiting explicitly here keeps both in sync.
+    if (document.fullscreenElement) {
+      try { document.exitFullscreen(); } catch (e) {}
+    }
+  }
+
   const DEFAULT_PLACEHOLDER_TEXT = 'Pick a video from the queue to start playing.';
 
   function showPlaceholder(text, showRetry) {
@@ -88,6 +146,12 @@
 
   function hidePlaceholder() {
     document.getElementById('playerPlaceholder').style.display = 'none';
+  }
+
+  function hideAllPlayers() {
+    document.getElementById('player').style.display = 'none';
+    localPlayerEl().style.display = 'none';
+    embedPlayerEl().style.display = 'none';
   }
 
   // ---------- Rendering ----------
@@ -126,6 +190,12 @@
     updateRepeatButton();
   }
 
+  const BADGES = {
+    local: '<span class="video-badge">Local</span>',
+    facebook: '<span class="video-badge badge-facebook">Facebook</span>',
+    instagram: '<span class="video-badge badge-instagram">Instagram</span>'
+  };
+
   function renderVideoList() {
     const playlist = getActivePlaylist();
     const list = document.getElementById('videoList');
@@ -142,7 +212,7 @@
 
       const metaEl = document.createElement('div');
       metaEl.className = 'video-meta';
-      const badge = video.type === 'local' ? '<span class="video-badge">Local</span>' : '';
+      const badge = BADGES[video.type] || '';
       metaEl.innerHTML = `<div class="video-title">${badge}<span class="video-title-text"></span></div><div class="video-url"></div>`;
       metaEl.querySelector('.video-title-text').textContent = video.title;
       metaEl.querySelector('.video-url').textContent = video.type === 'local' ? video.filePath : video.url;
@@ -253,12 +323,12 @@
 
   // ---------- Video CRUD ----------
 
-  async function addYoutubeVideo(url, titleOverride) {
+  async function addWebVideo(url, titleOverride) {
     const playlist = getActivePlaylist();
     if (!playlist) return;
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-      alert('That doesn\'t look like a valid YouTube URL. Try a link like https://www.youtube.com/watch?v=... or https://youtu.be/...');
+    const classified = classifyWebUrl(url);
+    if (!classified) {
+      alert("That doesn't look like a YouTube, Facebook, or Instagram video URL.");
       return;
     }
 
@@ -267,7 +337,10 @@
       title = await fetchTitle(url) || 'Untitled video';
     }
 
-    playlist.videos.push({ id: uid(), type: 'youtube', url, videoId, title });
+    const video = { id: uid(), type: classified.type, url, title };
+    if (classified.type === 'youtube') video.videoId = classified.videoId;
+
+    playlist.videos.push(video);
     scheduleSave();
     renderSidebar();
     renderVideoList();
@@ -282,6 +355,40 @@
     scheduleSave();
     renderSidebar();
     renderVideoList();
+  }
+
+  // Bulk-imports a text file's lines: each line can be a YouTube/Facebook/
+  // Instagram URL, or a local file path (matched by its video extension).
+  async function addFromTextLines(lines) {
+    const playlist = getActivePlaylist();
+    if (!playlist || !lines || lines.length === 0) return;
+
+    let added = 0;
+    let skipped = 0;
+
+    for (const line of lines) {
+      const classified = classifyWebUrl(line);
+      if (classified) {
+        const title = await fetchTitle(line) || 'Untitled video';
+        const video = { id: uid(), type: classified.type, url: line, title };
+        if (classified.type === 'youtube') video.videoId = classified.videoId;
+        playlist.videos.push(video);
+        added += 1;
+      } else if (looksLikeLocalVideoPath(line)) {
+        playlist.videos.push({ id: uid(), type: 'local', filePath: line, title: baseNameWithoutExt(line) });
+        added += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    scheduleSave();
+    renderSidebar();
+    renderVideoList();
+
+    if (skipped > 0) {
+      alert(`Added ${added} video(s). Skipped ${skipped} line(s) that didn't look like a supported URL or video file path.`);
+    }
   }
 
   function deleteVideo(index) {
@@ -368,29 +475,31 @@
       }
       video.filePath = newPath;
       video.title = newTitle || baseNameWithoutExt(newPath);
-
-      if (editingIndex === currentVideoIndex && currentPlayerType === 'local') {
-        const el = localPlayerEl();
-        el.src = localVideoSrc(video.filePath);
-        el.play().catch(() => {});
-      }
     } else {
       const newUrl = document.getElementById('editUrlInput').value.trim();
-      const newVideoId = extractVideoId(newUrl);
-      if (!newVideoId) {
-        alert('That doesn\'t look like a valid YouTube URL.');
+      const classified = classifyWebUrl(newUrl);
+      if (!classified) {
+        alert("That doesn't look like a YouTube, Facebook, or Instagram video URL.");
         return;
       }
-      video.title = newTitle || video.title;
+      video.type = classified.type;
       video.url = newUrl;
-      video.videoId = newVideoId;
-
-      if (editingIndex === currentVideoIndex && currentPlayerType === 'youtube' && ytPlayer && ytReady) {
-        ytPlayer.loadVideoById({ videoId: newVideoId, suggestedQuality: getPreferredQuality() });
+      video.title = newTitle || video.title;
+      if (classified.type === 'youtube') {
+        video.videoId = classified.videoId;
+      } else {
+        delete video.videoId;
       }
     }
 
     scheduleSave();
+
+    if (editingIndex === currentVideoIndex) {
+      // Re-run the load path so whichever type it ended up being (possibly
+      // changed) starts playing correctly.
+      playVideoAt(editingIndex);
+    }
+
     renderVideoList();
     updateNowPlaying();
     closeEditModal();
@@ -399,33 +508,46 @@
   // ---------- Player ----------
 
   function resetPlayerToPlaceholder() {
+    exitFullscreenIfActive();
     showPlaceholder(DEFAULT_PLACEHOLDER_TEXT, false);
+    hideAllPlayers();
     document.getElementById('player').style.display = '';
-    localPlayerEl().style.display = 'none';
+    document.getElementById('embedHint').hidden = true;
+    document.getElementById('playPauseBtn').disabled = false;
     currentPlayerType = null;
     updatePlayPauseIcon(false);
     updateNowPlaying();
+
     if (ytPlayer && ytReady) {
       try { ytPlayer.stopVideo(); } catch (e) {}
     }
-    const el = localPlayerEl();
-    el.pause();
-    el.removeAttribute('src');
-    el.load();
+    const localEl = localPlayerEl();
+    localEl.pause();
+    localEl.removeAttribute('src');
+    localEl.load();
+
+    embedPlayerEl().src = '';
   }
 
   function playVideoAt(index) {
     const playlist = getActivePlaylist();
     if (!playlist || !playlist.videos[index]) return;
+
+    exitFullscreenIfActive();
+
     currentVideoIndex = index;
     const video = playlist.videos[index];
 
+    // Stop whatever was previously active before switching to the new one.
+    if (ytPlayer && ytReady) {
+      try { ytPlayer.stopVideo(); } catch (e) {}
+    }
+    localPlayerEl().pause();
+    hideAllPlayers();
+    document.getElementById('embedHint').hidden = true;
+    document.getElementById('playPauseBtn').disabled = false;
+
     if (video.type === 'local') {
-      // Stop any YouTube playback and switch views to the local <video> element.
-      if (ytPlayer && ytReady) {
-        try { ytPlayer.stopVideo(); } catch (e) {}
-      }
-      document.getElementById('player').style.display = 'none';
       hidePlaceholder();
       const el = localPlayerEl();
       el.style.display = 'block';
@@ -433,13 +555,17 @@
       el.currentTime = 0;
       el.play().catch(() => {});
       currentPlayerType = 'local';
+    } else if (video.type === 'facebook' || video.type === 'instagram') {
+      hidePlaceholder();
+      const el = embedPlayerEl();
+      el.style.display = 'block';
+      el.src = buildEmbedSrc(video);
+      currentPlayerType = 'embed';
+      document.getElementById('embedHint').hidden = false;
+      document.getElementById('playPauseBtn').disabled = true;
+      updatePlayPauseIcon(false);
     } else {
-      // Stop any local playback and switch views to the YouTube player.
-      const el = localPlayerEl();
-      el.pause();
-      el.style.display = 'none';
       currentPlayerType = 'youtube';
-
       if (ytReady && ytPlayer) {
         document.getElementById('player').style.display = '';
         hidePlaceholder();
@@ -447,7 +573,6 @@
         ytPlayer.playVideo();
       } else {
         pendingVideoIdToLoad = video.videoId;
-        document.getElementById('player').style.display = 'none';
         if (ytLoadFailed) {
           showPlaceholder("Couldn't load the YouTube player. Check your internet connection, then retry.", true);
         } else {
@@ -461,6 +586,8 @@
   }
 
   function playPauseToggle() {
+    if (currentPlayerType === 'embed') return; // no control API for these embeds
+
     if (currentVideoIndex < 0) {
       const playlist = getActivePlaylist();
       if (playlist && playlist.videos.length > 0) playVideoAt(0);
@@ -493,7 +620,7 @@
         const el = localPlayerEl();
         el.currentTime = 0;
         el.play().catch(() => {});
-      } else if (ytPlayer && ytReady) {
+      } else if (currentPlayerType === 'youtube' && ytPlayer && ytReady) {
         ytPlayer.seekTo(0);
         ytPlayer.playVideo();
       }
@@ -628,7 +755,7 @@
       const titleInput = document.getElementById('videoTitleInput');
       const url = urlInput.value.trim();
       if (!url) return;
-      await addYoutubeVideo(url, titleInput.value);
+      await addWebVideo(url, titleInput.value);
       urlInput.value = '';
       titleInput.value = '';
       urlInput.focus();
@@ -637,6 +764,18 @@
     document.getElementById('addLocalBtn').addEventListener('click', async () => {
       const files = await window.api.selectLocalVideoFiles();
       addLocalVideos(files);
+    });
+
+    document.getElementById('addFolderBtn').addEventListener('click', async () => {
+      const files = await window.api.selectVideoFolder();
+      if (!files || files.length === 0) return;
+      addLocalVideos(files);
+    });
+
+    document.getElementById('importTextBtn').addEventListener('click', async () => {
+      const lines = await window.api.importTextFile();
+      if (!lines || lines.length === 0) return;
+      await addFromTextLines(lines);
     });
 
     document.getElementById('prevBtn').addEventListener('click', playPrev);

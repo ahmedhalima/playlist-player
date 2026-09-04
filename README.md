@@ -1,20 +1,21 @@
 # Playlist Player
 
-A small cross-platform desktop app (Electron) for building and playing playlists of YouTube video links.
+A small cross-platform desktop app (Electron) for building and playing playlists of videos from YouTube, Facebook, Instagram, and your own computer.
 
 ## Features
 
 - Create, rename (✎ next to the title), and delete playlists
-- Add videos by pasting a YouTube URL (title is auto-filled, but you can override it)
-- Add local video files (mp4, mov, mkv, webm, etc.) from your computer via a native file picker
+- Add videos by pasting a YouTube, Facebook, or Instagram URL (title is auto-filled where possible, or override it yourself)
+- Add local video files (mp4, mov, mkv, webm, etc.) one at a time, or all at once from an entire folder (including subfolders)
+- Bulk-import a whole list at once from a `.txt` file — one URL or local file path per line
 - Edit or delete any video, reorder with the up/down arrows
-- Click any video to play it in the built-in player — YouTube links use the YouTube player, local files use a native video player, and you can mix both in the same playlist
-- Set a preferred playback quality (144p–1080p, or Auto) at the bottom of the sidebar; it defaults to 360p and applies to all YouTube videos
+- Click any video to play it in the built-in player — YouTube and local files play with full control (play/pause, seek, quality); Facebook/Instagram play through their own embedded player (see limitations below)
+- Set a preferred playback quality (144p–1080p, or Auto) at the bottom of the sidebar; it defaults to 360p and applies to YouTube videos
 - Prev / Play-Pause / Next transport controls
 - Repeat modes per playlist, cycled with one button: **Off → All → One**
   - **Off** — playlist stops after the last video
   - **All** — loops back to the first video after the last one finishes
-  - **One** — replays the current video on a loop
+  - **One** — replays the current video on a loop (YouTube and local videos only — see below)
 - Everything is saved automatically to a local JSON file (no account, no cloud)
 
 ## Requirements
@@ -24,7 +25,7 @@ A small cross-platform desktop app (Electron) for building and playing playlists
 ## Setup
 
 ```bash
-cd playlist-app
+cd playlist-player
 npm install
 npm start
 ```
@@ -51,10 +52,15 @@ Playlists are stored as JSON in Electron's per-OS app-data folder, e.g.:
 - Windows: `%APPDATA%\Playlist Player\playlist-player-data.json`
 - Linux: `~/.config/Playlist Player/playlist-player-data.json`
 
-## Notes
+## Notes and limitations
 
-- Playback of YouTube links uses the official YouTube IFrame Player API, so an internet connection is required for those (same as visiting YouTube in a browser). Local files play back fully offline.
+- Playback of YouTube, Facebook, and Instagram links needs an internet connection (same as watching them in a browser). Local files play back fully offline.
 - Supported YouTube URL formats: `youtube.com/watch?v=...`, `youtu.be/...`, `youtube.com/embed/...`, `youtube.com/shorts/...`.
-- Local videos are referenced by file path, not copied into the app — if you move or rename the original file, re-link it from the video's edit (✎) menu.
+- **Facebook and Instagram videos play through those platforms' own embedded player**, which this app doesn't have a programmatic control API for (unlike YouTube's). That means:
+  - The app's Play/Pause button is disabled for these — use the controls inside the embedded video itself.
+  - There's no reliable "video finished" signal from Facebook/Instagram, so **auto-advance to the next video and Repeat: One don't work for them** — click Next manually when one ends.
+  - Some private, restricted, or region-locked posts may refuse to load in an embedded player at all; that's a platform-side restriction, not something this app can work around.
+- Local videos are referenced by file path, not copied into the app — if you move or rename the original file, re-link it from the video's edit (✎) menu. The same applies to files added via "Add local folder…" or a text-file import.
 - The playback quality setting is sent to YouTube as a *request*, not a hard rule — YouTube's player is allowed to raise it automatically depending on your connection speed and the player size, especially in fullscreen. It's re-asserted on every load and state change, but YouTube has the final say for embedded playback.
 - The app serves its own UI from `http://127.0.0.1` (a local server started on a random free port, only reachable from your own machine) instead of loading it as a `file://` page. This is required for YouTube's embedded player to work correctly in a desktop app — without it, YouTube playback fails with "Error 153: video player configuration error".
+- Fullscreen is exited automatically whenever the playlist switches to a different video, to avoid a glitch where the app window stays fullscreen but the video shrinks back to normal size (this happens because swapping between the YouTube/local/embed players hides the fullscreen element without Electron's window-level fullscreen being told to exit).

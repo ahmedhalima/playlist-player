@@ -34,6 +34,44 @@ function videoMimeType(filePath) {
   return VIDEO_MIME_TYPES[ext] || 'application/octet-stream';
 }
 
+const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v', 'wmv', 'flv', 'ogv'];
+const MAX_FOLDER_SCAN_FILES = 2000;
+const MAX_FOLDER_SCAN_DEPTH = 8;
+
+async function scanFolderForVideos(rootDir) {
+  const results = [];
+
+  async function walk(dir, depth) {
+    if (results.length >= MAX_FOLDER_SCAN_FILES || depth > MAX_FOLDER_SCAN_DEPTH) return;
+    let entries;
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      return;
+    }
+    // Keep the listing stable/predictable for the user.
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const entry of entries) {
+      if (results.length >= MAX_FOLDER_SCAN_FILES) return;
+      if (entry.name.startsWith('.')) continue; // skip hidden files/folders
+
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(fullPath, depth + 1);
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase().replace(/^\./, '');
+        if (VIDEO_EXTENSIONS.includes(ext)) {
+          results.push(fullPath);
+        }
+      }
+    }
+  }
+
+  await walk(rootDir, 0);
+  return results;
+}
+
 // Local video files are streamed through this custom scheme instead of file://,
 // because YouTube (and Chromium's media loader) treat file:// origins as
 // untrusted once the page itself is served over http://. Registering it as
@@ -237,9 +275,41 @@ ipcMain.handle('dialog:selectVideoFiles', async () => {
     title: 'Add local video files',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Video files', extensions: ['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v', 'wmv', 'flv', 'ogv'] },
+      { name: 'Video files', extensions: VIDEO_EXTENSIONS },
       { name: 'All files', extensions: ['*'] }
     ]
   });
   return result.canceled ? [] : result.filePaths;
+});
+
+ipcMain.handle('dialog:selectVideoFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Add all videos from a folder',
+    properties: ['openDirectory']
+  });
+  if (result.canceled || result.filePaths.length === 0) return [];
+  const files = await scanFolderForVideos(result.filePaths[0]);
+  return files;
+});
+
+ipcMain.handle('dialog:importTextFile', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import video links from a text file',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Text files', extensions: ['txt'] },
+      { name: 'All files', extensions: ['*'] }
+    ]
+  });
+  if (result.canceled || result.filePaths.length === 0) return [];
+
+  try {
+    const raw = await fs.promises.readFile(result.filePaths[0], 'utf-8');
+    return raw
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith('#'));
+  } catch (err) {
+    return [];
+  }
 });
