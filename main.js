@@ -161,10 +161,10 @@ async function createWindow() {
   const port = await startRendererServer();
 
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 860,
-    minHeight: 560,
+    width: 1360,
+    height: 860,
+    minWidth: 900,
+    minHeight: 600,
     backgroundColor: '#16151A',
     autoHideMenuBar: true,
     webPreferences: {

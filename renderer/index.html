@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com https://www.gstatic.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.facebook.com https://web.facebook.com https://www.instagram.com; img-src 'self' https: data:; media-src 'self' local-video: blob:; connect-src 'self' https://www.youtube.com https://noembed.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com https://www.gstatic.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' https: data:; media-src 'self' local-video: blob:; connect-src 'self' https://www.youtube.com https://noembed.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;">
 <title>Playlist Player</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -42,7 +42,6 @@
         <div class="player-frame">
           <div id="player"></div>
           <video id="localPlayer" class="local-player" playsinline controls></video>
-          <iframe id="embedPlayer" class="embed-player" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen frameborder="0"></iframe>
           <div id="playerPlaceholder" class="player-placeholder">
             <p id="playerPlaceholderText">Pick a video from the queue to start playing.</p>
             <button id="playerRetryBtn" class="btn btn-ghost" hidden>Retry loading YouTube player</button>
@@ -54,7 +53,6 @@
           <button id="playPauseBtn" class="transport-btn transport-btn-primary" title="Play/Pause">▶</button>
           <button id="nextBtn" class="transport-btn" title="Next">⏭</button>
           <button id="repeatBtn" class="repeat-btn" title="Cycle repeat mode">Repeat: Off</button>
-          <span id="embedHint" class="embed-hint" hidden>Use the video's own controls — click Next when it's done.</span>
           <div class="now-playing">
             <span id="nowPlayingLabel">Nothing playing</span>
           </div>
@@ -83,7 +81,7 @@
           </form>
 
           <form id="addVideoForm" class="add-video-form">
-            <input id="videoUrlInput" type="text" placeholder="Paste a YouTube, Facebook, or Instagram video URL…" />
+            <input id="videoUrlInput" type="text" placeholder="Paste a YouTube URL…" />
             <input id="videoTitleInput" type="text" placeholder="Title (optional — auto-filled if left blank)" />
             <button type="submit" class="btn btn-add">+ Add video</button>
           </form>
@@ -93,7 +91,7 @@
             <button id="addFolderBtn" type="button" class="btn btn-add-local">+ Add local folder…</button>
             <button id="importTextBtn" type="button" class="btn btn-add-local">+ Import from text file…</button>
           </div>
-          <p class="add-local-hint">Local: MP4, MOV, MKV, WebM, and more. Text file: one YouTube/Facebook/Instagram URL or local file path per line.</p>
+          <p class="add-local-hint">Local: MP4, MOV, MKV, WebM, and more. Text file: one YouTube URL or local file path per line.</p>
 
           <ol id="videoList" class="video-list"></ol>
         </div>

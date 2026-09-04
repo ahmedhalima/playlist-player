@@ -169,7 +169,7 @@ button {
 .player-frame {
   position: relative;
   width: 100%;
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
   aspect-ratio: 16 / 9;
   background: #000;
@@ -192,16 +192,6 @@ button {
   display: none;
 }
 
-.embed-player {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: #000;
-  border: none;
-  display: none;
-}
-
 .player-placeholder {
   position: absolute;
   inset: 0;
@@ -218,7 +208,7 @@ button {
 }
 
 .transport {
-  max-width: 720px;
+  max-width: 960px;
   margin: 14px auto 0 auto;
   display: flex;
   align-items: center;
@@ -228,17 +218,21 @@ button {
 .transport-btn {
   background: var(--panel);
   border: 1px solid var(--border);
-  color: var(--text);
-  width: 38px;
-  height: 38px;
+  color: var(--gold);
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  font-size: 14px;
+  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.transport-btn:hover { border-color: var(--gold-dim); }
+.transport-btn:hover {
+  border-color: var(--gold);
+  background: #241f14;
+}
 
 .transport-btn:disabled {
   opacity: 0.35;
@@ -247,18 +241,19 @@ button {
 
 .transport-btn:disabled:hover {
   border-color: var(--border);
+  background: var(--panel);
 }
 
 .transport-btn-primary {
   background: var(--gold);
   color: #16151A;
   border-color: var(--gold);
-  width: 42px;
-  height: 42px;
-  font-size: 16px;
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
 }
 
-.transport-btn-primary:hover { background: #e0bc4d; }
+.transport-btn-primary:hover { background: #e8c15a; }
 
 .repeat-btn {
   background: transparent;
@@ -285,11 +280,6 @@ button {
   text-align: right;
 }
 
-.embed-hint {
-  font-size: 12px;
-  color: var(--gold);
-}
-
 /* ---------- Queue ---------- */
 
 .queue-zone {
@@ -313,7 +303,7 @@ button {
 }
 
 .playlist-panel {
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
@@ -504,16 +494,6 @@ button {
   padding: 1px 5px;
   margin-right: 6px;
   vertical-align: middle;
-}
-
-.video-badge.badge-facebook {
-  color: #5B8DEF;
-  border-color: #5B8DEF;
-}
-
-.video-badge.badge-instagram {
-  color: #D46FAE;
-  border-color: #D46FAE;
 }
 
 .video-actions {
