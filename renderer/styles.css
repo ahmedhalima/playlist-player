@@ -169,7 +169,6 @@ button {
 .player-frame {
   position: relative;
   width: 100%;
-  max-width: 960px;
   margin: 0 auto;
   aspect-ratio: 16 / 9;
   background: #000;
@@ -208,8 +207,7 @@ button {
 }
 
 .transport {
-  max-width: 960px;
-  margin: 14px auto 0 auto;
+  margin: 14px 0 0 0;
   display: flex;
   align-items: center;
   gap: 10px;
