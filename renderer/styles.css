@@ -157,7 +157,8 @@ button {
 .main {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .player-zone {
@@ -169,7 +170,6 @@ button {
 .player-frame {
   position: relative;
   width: 100%;
-  max-height: 52vh;
   margin: 0 auto;
   aspect-ratio: 16 / 9;
   background: #000;
@@ -283,8 +283,7 @@ button {
 /* ---------- Queue ---------- */
 
 .queue-zone {
-  flex: 1 1 auto;
-  overflow-y: auto;
+  flex: 0 0 auto;
   padding: 22px 28px 40px 28px;
 }
 
