@@ -49,6 +49,24 @@
     return VIDEO_EXTENSIONS.includes(m[1].toLowerCase());
   }
 
+  function dragHasFiles(e) {
+    return !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+  }
+
+  // Resolves a drop event's dropped File objects down to real filesystem
+  // paths, keeping only ones that look like a supported video file.
+  function extractDroppedVideoPaths(dataTransfer) {
+    const paths = [];
+    if (!dataTransfer || !dataTransfer.files) return paths;
+    for (const file of dataTransfer.files) {
+      const filePath = window.api.getFilePath(file);
+      if (filePath && looksLikeLocalVideoPath(filePath)) {
+        paths.push(filePath);
+      }
+    }
+    return paths;
+  }
+
   function baseNameWithoutExt(filePath) {
     const parts = filePath.split(/[\\/]/);
     const last = parts[parts.length - 1] || filePath;
@@ -125,6 +143,26 @@
       item.innerHTML = `<span class="name"></span><span class="count">${pl.videos.length}</span>`;
       item.querySelector('.name').textContent = pl.name;
       item.addEventListener('click', () => selectPlaylist(pl.id));
+
+      item.addEventListener('dragover', (e) => {
+        if (!dragHasFiles(e)) return;
+        e.preventDefault();
+        item.classList.add('drag-over');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+      item.addEventListener('drop', (e) => {
+        if (!dragHasFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        item.classList.remove('drag-over');
+        const paths = extractDroppedVideoPaths(e.dataTransfer);
+        if (paths.length === 0) {
+          alert('No supported video files were dropped. Supported: ' + VIDEO_EXTENSIONS.join(', '));
+          return;
+        }
+        addLocalVideos(paths, pl.id);
+      });
+
       nav.appendChild(item);
     });
   }
@@ -297,15 +335,17 @@
     renderVideoList();
   }
 
-  function addLocalVideos(filePaths) {
-    const playlist = getActivePlaylist();
+  function addLocalVideos(filePaths, targetPlaylistId) {
+    const playlist = targetPlaylistId
+      ? state.playlists.find(p => p.id === targetPlaylistId)
+      : getActivePlaylist();
     if (!playlist || !filePaths || filePaths.length === 0) return;
     filePaths.forEach(filePath => {
       playlist.videos.push({ id: uid(), type: 'local', filePath, title: baseNameWithoutExt(filePath) });
     });
     scheduleSave();
     renderSidebar();
-    renderVideoList();
+    if (playlist.id === activePlaylistId) renderVideoList();
   }
 
   // Bulk-imports a text file's lines: each line can be a YouTube URL, or a
@@ -728,6 +768,37 @@
 
     document.getElementById('sidebarCollapseBtn').addEventListener('click', () => setSidebarCollapsed(true));
     document.getElementById('sidebarExpandBtn').addEventListener('click', () => setSidebarCollapsed(false));
+
+    // Without this, dropping a file anywhere in the window makes Chromium
+    // navigate to/open it instead of letting our drop zones handle it.
+    document.addEventListener('dragover', (e) => { if (dragHasFiles(e)) e.preventDefault(); });
+    document.addEventListener('drop', (e) => { if (dragHasFiles(e)) e.preventDefault(); });
+
+    const queueZone = document.getElementById('queueZone');
+    queueZone.addEventListener('dragover', (e) => {
+      if (!dragHasFiles(e)) return;
+      e.preventDefault();
+      queueZone.classList.add('drag-over');
+    });
+    queueZone.addEventListener('dragleave', (e) => {
+      if (!queueZone.contains(e.relatedTarget)) queueZone.classList.remove('drag-over');
+    });
+    queueZone.addEventListener('drop', (e) => {
+      if (!dragHasFiles(e)) return;
+      e.preventDefault();
+      queueZone.classList.remove('drag-over');
+      const playlist = getActivePlaylist();
+      if (!playlist) {
+        alert('Select or create a playlist first, then drop your video files onto it.');
+        return;
+      }
+      const paths = extractDroppedVideoPaths(e.dataTransfer);
+      if (paths.length === 0) {
+        alert('No supported video files were dropped. Supported: ' + VIDEO_EXTENSIONS.join(', '));
+        return;
+      }
+      addLocalVideos(paths);
+    });
 
     document.getElementById('qualitySelect').addEventListener('change', (e) => {
       if (!state.settings) state.settings = {};

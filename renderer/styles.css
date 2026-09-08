@@ -154,6 +154,12 @@ button {
   border-color: var(--gold-dim);
 }
 
+.playlist-nav-item.drag-over {
+  background: #241f14;
+  border-color: var(--gold);
+  color: var(--text);
+}
+
 .playlist-nav-item .count {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
@@ -331,6 +337,14 @@ button {
 .queue-zone {
   flex: 0 0 auto;
   padding: 22px 28px 40px 28px;
+  outline: 2px dashed transparent;
+  outline-offset: -10px;
+  transition: outline-color 0.1s ease, background 0.1s ease;
+}
+
+.queue-zone.drag-over {
+  outline-color: var(--gold);
+  background: rgba(212, 175, 55, 0.05);
 }
 
 .empty-state {
