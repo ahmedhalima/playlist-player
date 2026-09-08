@@ -668,6 +668,12 @@
     loadYouTubeAPI();
   }
 
+  function setSidebarCollapsed(collapsed) {
+    document.getElementById('appRoot').classList.toggle('sidebar-collapsed', collapsed);
+    document.getElementById('sidebarExpandBtn').hidden = !collapsed;
+    try { localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0'); } catch (e) {}
+  }
+
   // ---------- Wiring ----------
 
   function wireEvents() {
@@ -720,6 +726,9 @@
     document.getElementById('editBrowseBtn').addEventListener('click', browseForReplacementFile);
     document.getElementById('playerRetryBtn').addEventListener('click', retryYouTubeLoad);
 
+    document.getElementById('sidebarCollapseBtn').addEventListener('click', () => setSidebarCollapsed(true));
+    document.getElementById('sidebarExpandBtn').addEventListener('click', () => setSidebarCollapsed(false));
+
     document.getElementById('qualitySelect').addEventListener('change', (e) => {
       if (!state.settings) state.settings = {};
       state.settings.quality = e.target.value;
@@ -750,6 +759,9 @@
 
     wireEvents();
     document.getElementById('qualitySelect').value = state.settings.quality;
+    let savedCollapsed = false;
+    try { savedCollapsed = localStorage.getItem('sidebarCollapsed') === '1'; } catch (e) {}
+    setSidebarCollapsed(savedCollapsed);
     renderSidebar();
     renderPlaylistPanel();
     loadYouTubeAPI();
