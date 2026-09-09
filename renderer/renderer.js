@@ -14,6 +14,7 @@
   let saveTimer = null;
   let editingIndex = -1;
   let editingType = null;
+  let draggedVideoIndex = null;
 
   const REPEAT_MODES = ['off', 'all', 'one'];
   const REPEAT_LABELS = { off: 'Repeat: Off', all: 'Repeat: All', one: 'Repeat: One' };
@@ -71,6 +72,52 @@
     const parts = filePath.split(/[\\/]/);
     const last = parts[parts.length - 1] || filePath;
     return last.replace(/\.[^.]+$/, '');
+  }
+
+  function formatDuration(seconds) {
+    if (!seconds || !isFinite(seconds) || seconds <= 0) return '—';
+    const total = Math.round(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) {
+      return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  // Reads a local video file's duration by loading just its metadata (the
+  // local-video:// protocol supports byte ranges, so this only pulls the
+  // small chunk of the file needed for that, not the whole thing).
+  function probeLocalDuration(video) {
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.style.cssText = 'position:absolute; width:0; height:0; opacity:0; pointer-events:none;';
+
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      probe.removeAttribute('src');
+      probe.load();
+      if (probe.parentNode) probe.parentNode.removeChild(probe);
+    };
+
+    probe.addEventListener('loadedmetadata', () => {
+      if (isFinite(probe.duration) && probe.duration > 0) {
+        video.duration = probe.duration;
+        scheduleSave();
+        if (getActivePlaylist() && getActivePlaylist().videos.includes(video)) {
+          renderVideoList();
+        }
+      }
+      cleanup();
+    });
+    probe.addEventListener('error', cleanup);
+    setTimeout(cleanup, 15000); // give up quietly if the file is missing/broken
+
+    probe.src = localVideoSrc(video.filePath);
+    document.body.appendChild(probe);
   }
 
   async function fetchTitle(url) {
@@ -197,6 +244,43 @@
     playlist.videos.forEach((video, idx) => {
       const li = document.createElement('li');
       li.className = 'video-row' + (idx === currentVideoIndex ? ' playing' : '');
+      li.draggable = true;
+
+      li.addEventListener('dragstart', (e) => {
+        if (e.target.closest('.video-actions')) { e.preventDefault(); return; }
+        draggedVideoIndex = idx;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+        setTimeout(() => li.classList.add('dragging'), 0);
+      });
+      li.addEventListener('dragend', () => {
+        li.classList.remove('dragging');
+        draggedVideoIndex = null;
+        list.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+          el.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+      });
+      li.addEventListener('dragover', (e) => {
+        if (draggedVideoIndex === null || draggedVideoIndex === idx) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = li.getBoundingClientRect();
+        const isAfter = (e.clientY - rect.top) > rect.height / 2;
+        li.classList.toggle('drag-over-top', !isAfter);
+        li.classList.toggle('drag-over-bottom', isAfter);
+      });
+      li.addEventListener('dragleave', () => {
+        li.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+      li.addEventListener('drop', (e) => {
+        if (draggedVideoIndex === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = li.getBoundingClientRect();
+        const isAfter = (e.clientY - rect.top) > rect.height / 2;
+        reorderVideo(draggedVideoIndex, idx + (isAfter ? 1 : 0));
+        li.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
 
       const indexEl = document.createElement('div');
       indexEl.className = 'video-index';
@@ -210,6 +294,10 @@
       metaEl.querySelector('.video-url').textContent = video.type === 'local' ? video.filePath : video.url;
       metaEl.addEventListener('click', () => playVideoAt(idx));
 
+      const durationEl = document.createElement('span');
+      durationEl.className = 'video-duration';
+      durationEl.textContent = formatDuration(video.duration);
+
       const actionsEl = document.createElement('div');
       actionsEl.className = 'video-actions';
       actionsEl.innerHTML = `
@@ -218,6 +306,7 @@
         <button class="icon-btn" data-action="edit" title="Edit">✎</button>
         <button class="icon-btn danger" data-action="delete" title="Delete">✕</button>
       `;
+      actionsEl.prepend(durationEl);
       actionsEl.querySelector('[data-action="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveVideo(idx, -1); });
       actionsEl.querySelector('[data-action="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveVideo(idx, 1); });
       actionsEl.querySelector('[data-action="edit"]').addEventListener('click', (e) => { e.stopPropagation(); openEditModal(idx); });
@@ -228,8 +317,37 @@
       li.appendChild(actionsEl);
       list.appendChild(li);
     });
+
+    renderPlaylistDurationSummary(playlist);
   }
 
+  function renderPlaylistDurationSummary(playlist) {
+    const el = document.getElementById('playlistDurationSummary');
+    if (!el) return;
+    if (!playlist || playlist.videos.length === 0) {
+      el.textContent = '';
+      return;
+    }
+
+    let totalSeconds = 0;
+    let unknownCount = 0;
+    playlist.videos.forEach(v => {
+      if (v.duration && isFinite(v.duration) && v.duration > 0) totalSeconds += v.duration;
+      else unknownCount += 1;
+    });
+
+    const count = playlist.videos.length;
+    let text = `${count} video${count === 1 ? '' : 's'}`;
+    if (totalSeconds > 0) {
+      text += ` • ${formatDuration(totalSeconds)} total`;
+      if (unknownCount > 0) {
+        text += ` (+${unknownCount} unknown — play them once to measure)`;
+      }
+    } else {
+      text += ' • duration unknown';
+    }
+    el.textContent = text;
+  }
   function updateRepeatButton() {
     const playlist = getActivePlaylist();
     const btn = document.getElementById('repeatBtn');
@@ -341,7 +459,9 @@
       : getActivePlaylist();
     if (!playlist || !filePaths || filePaths.length === 0) return;
     filePaths.forEach(filePath => {
-      playlist.videos.push({ id: uid(), type: 'local', filePath, title: baseNameWithoutExt(filePath) });
+      const video = { id: uid(), type: 'local', filePath, title: baseNameWithoutExt(filePath) };
+      playlist.videos.push(video);
+      probeLocalDuration(video);
     });
     scheduleSave();
     renderSidebar();
@@ -364,7 +484,9 @@
         playlist.videos.push({ id: uid(), type: 'youtube', url: line, videoId, title });
         added += 1;
       } else if (looksLikeLocalVideoPath(line)) {
-        playlist.videos.push({ id: uid(), type: 'local', filePath: line, title: baseNameWithoutExt(line) });
+        const video = { id: uid(), type: 'local', filePath: line, title: baseNameWithoutExt(line) };
+        playlist.videos.push(video);
+        probeLocalDuration(video);
         added += 1;
       } else {
         skipped += 1;
@@ -405,6 +527,35 @@
     playlist.videos.splice(newIndex, 0, item);
     if (currentVideoIndex === index) currentVideoIndex = newIndex;
     else if (currentVideoIndex === newIndex) currentVideoIndex = index;
+    scheduleSave();
+    renderVideoList();
+  }
+
+  // Moves the video at fromIndex to sit just before what is currently
+  // toIndex (toIndex is expressed in terms of the array *before* the move,
+  // so it can validly equal playlist.videos.length to mean "at the end").
+  function reorderVideo(fromIndex, toIndex) {
+    const playlist = getActivePlaylist();
+    if (!playlist) return;
+    const videos = playlist.videos;
+    if (fromIndex < 0 || fromIndex >= videos.length) return;
+    if (toIndex === fromIndex || toIndex === fromIndex + 1) return; // dropping back in place
+
+    const [item] = videos.splice(fromIndex, 1);
+    let insertAt = fromIndex < toIndex ? toIndex - 1 : toIndex;
+    insertAt = Math.max(0, Math.min(insertAt, videos.length));
+    videos.splice(insertAt, 0, item);
+
+    // Keep the "currently playing" pointer accurate after the shuffle.
+    if (currentVideoIndex === fromIndex) {
+      currentVideoIndex = insertAt;
+    } else if (currentVideoIndex !== -1) {
+      const removedBeforePlaying = fromIndex < currentVideoIndex;
+      const insertedBeforeOrAtPlaying = insertAt <= currentVideoIndex;
+      if (removedBeforePlaying) currentVideoIndex -= 1;
+      if (insertedBeforeOrAtPlaying) currentVideoIndex += 1;
+    }
+
     scheduleSave();
     renderVideoList();
   }
@@ -462,8 +613,14 @@
         alert('A file path is required.');
         return;
       }
+      const pathChanged = newPath !== video.filePath;
       video.filePath = newPath;
       video.title = newTitle || baseNameWithoutExt(newPath);
+
+      if (pathChanged) {
+        video.duration = undefined;
+        probeLocalDuration(video);
+      }
 
       if (editingIndex === currentVideoIndex && currentPlayerType === 'local') {
         const el = localPlayerEl();
@@ -477,6 +634,7 @@
         alert('That doesn\'t look like a valid YouTube URL.');
         return;
       }
+      if (newVideoId !== video.videoId) video.duration = undefined;
       video.title = newTitle || video.title;
       video.url = newUrl;
       video.videoId = newVideoId;
@@ -663,6 +821,21 @@
             // actually starts streaming, so re-assert our preference here too.
             try { ytPlayer.setPlaybackQuality(getPreferredQuality()); } catch (e) {}
           }
+          if (event.data === YT.PlayerState.CUED || event.data === YT.PlayerState.BUFFERING || event.data === YT.PlayerState.PLAYING) {
+            // There's no way to learn a YouTube video's duration without
+            // loading it (no API key = no Data API lookup), so we capture
+            // it the first time it's actually cued/played and remember it.
+            const dur = Math.round(ytPlayer.getDuration());
+            if (dur && dur > 0) {
+              const playlist = getActivePlaylist();
+              const video = playlist && playlist.videos[currentVideoIndex];
+              if (video && video.duration !== dur) {
+                video.duration = dur;
+                scheduleSave();
+                renderVideoList();
+              }
+            }
+          }
           if (event.data === YT.PlayerState.ENDED) {
             updatePlayPauseIcon(false);
             playNext(true);
@@ -800,6 +973,18 @@
       addLocalVideos(paths);
     });
 
+    const videoList = document.getElementById('videoList');
+    videoList.addEventListener('dragover', (e) => {
+      if (draggedVideoIndex === null) return;
+      e.preventDefault();
+    });
+    videoList.addEventListener('drop', (e) => {
+      if (draggedVideoIndex === null || e.target !== videoList) return;
+      e.preventDefault();
+      const p = getActivePlaylist();
+      if (p) reorderVideo(draggedVideoIndex, p.videos.length);
+    });
+
     document.getElementById('qualitySelect').addEventListener('change', (e) => {
       if (!state.settings) state.settings = {};
       state.settings.quality = e.target.value;
@@ -836,6 +1021,12 @@
     renderSidebar();
     renderPlaylistPanel();
     loadYouTubeAPI();
+
+    state.playlists.forEach(p => {
+      p.videos.forEach(v => {
+        if (v.type === 'local' && !v.duration) probeLocalDuration(v);
+      });
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
