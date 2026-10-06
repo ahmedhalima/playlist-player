@@ -176,6 +176,29 @@ async function createWindow() {
   });
 
   mainWindow.loadURL(`http://127.0.0.1:${port}/index.html`);
+
+  // Electron doesn't provide a native right-click menu for text fields by
+  // default (unlike a regular browser tab) — it has to be built explicitly.
+  // This covers every <input>/editable field in the app generically (the
+  // YouTube URL field, title fields, rename fields, etc.) via Chromium's own
+  // params.isEditable, so nothing needs wiring up per-field. It's independent
+  // of the video/playlist right-click menus below, which call preventDefault
+  // in the renderer on their own specific elements and never reach here.
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    if (!params.isEditable) return;
+    const { editFlags } = params;
+    Menu.buildFromTemplate([
+      { role: 'undo', enabled: editFlags.canUndo },
+      { role: 'redo', enabled: editFlags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', enabled: editFlags.canCut },
+      { role: 'copy', enabled: editFlags.canCopy },
+      { role: 'paste', enabled: editFlags.canPaste },
+      { role: 'delete', enabled: editFlags.canDelete },
+      { type: 'separator' },
+      { role: 'selectAll', enabled: editFlags.canSelectAll }
+    ]).popup({ window: mainWindow });
+  });
 }
 
 app.whenReady().then(() => {
