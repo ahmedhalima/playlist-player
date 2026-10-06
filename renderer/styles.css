@@ -612,6 +612,17 @@ button {
   border-color: var(--danger);
 }
 
+.icon-btn.danger-solid {
+  color: var(--danger);
+  border-color: transparent;
+}
+
+.icon-btn.danger-solid:hover {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
 /* ---------- Modal ---------- */
 
 .modal {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -312,4 +312,56 @@ ipcMain.handle('dialog:importTextFile', async () => {
   } catch (err) {
     return [];
   }
+});
+
+ipcMain.handle('file:deleteLocal', async (event, filePath) => {
+  try {
+    if (typeof filePath !== 'string' || !filePath) {
+      return { ok: false, error: 'No file path given.' };
+    }
+    await fs.promises.unlink(filePath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  }
+});
+
+// Native right-click context menus. The renderer asks for one with the
+// relevant info; the chosen action is sent back to the renderer to act on,
+// since the actual playlist state lives there.
+ipcMain.on('context-menu:video', (event, payload) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const respond = (action) => event.sender.send('context-menu-action', { action, ...payload });
+
+  const template = [
+    { label: 'Play', click: () => respond('play') },
+    { type: 'separator' },
+    { label: 'Move Up', enabled: !!payload.canMoveUp, click: () => respond('moveUp') },
+    { label: 'Move Down', enabled: !!payload.canMoveDown, click: () => respond('moveDown') },
+    { type: 'separator' },
+    { label: 'Edit…', click: () => respond('edit') },
+    { type: 'separator' },
+    { label: 'Remove from Playlist', click: () => respond('remove') }
+  ];
+
+  if (payload.isLocal) {
+    template.push({ type: 'separator' });
+    template.push({ label: 'Delete File from Disk…', click: () => respond('deleteFromDisk') });
+  }
+
+  Menu.buildFromTemplate(template).popup({ window: win });
+});
+
+ipcMain.on('context-menu:playlist', (event, payload) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const respond = (action) => event.sender.send('context-menu-action', { action, ...payload });
+
+  const template = [
+    { label: 'Open', click: () => respond('open') },
+    { label: 'Rename…', click: () => respond('rename') },
+    { type: 'separator' },
+    { label: 'Delete Playlist…', click: () => respond('deletePlaylist') }
+  ];
+
+  Menu.buildFromTemplate(template).popup({ window: win });
 });

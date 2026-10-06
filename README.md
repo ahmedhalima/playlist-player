@@ -8,7 +8,9 @@ A small cross-platform desktop app (Electron) for building and playing playlists
 - Add videos by pasting a YouTube URL (title is auto-filled, or override it yourself)
 - Add local video files (mp4, mov, mkv, webm, etc.) one at a time, or all at once from an entire folder (including subfolders)
 - Bulk-import a whole list at once from a `.txt` file — one YouTube URL or local file path per line
-- Edit or delete any video, reorder with the up/down arrows
+- Edit or remove any video, reorder with the up/down arrows or by dragging rows
+- Right-click a video or a playlist for a native menu with the same actions (Play, Move Up/Down, Edit, Remove, plus Delete File from Disk for local videos; Open, Rename, Delete for playlists)
+- Local videos can also be deleted from your computer entirely (not just removed from the playlist) via the red 🗑 icon or the right-click menu — this permanently deletes the file and removes it from every playlist that references it, after a confirmation prompt
 - Click any video to play it in the built-in player, with full control (play/pause, seek, quality) for both YouTube and local files
 - Set a preferred playback quality (144p–1080p, or Auto) at the bottom of the sidebar; it defaults to 360p and applies to YouTube videos
 - Prev / Play-Pause / Next transport controls

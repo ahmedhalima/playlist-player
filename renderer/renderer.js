@@ -197,6 +197,10 @@
         item.classList.add('drag-over');
       });
       item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        window.api.showPlaylistContextMenu({ playlistId: pl.id });
+      });
       item.addEventListener('drop', (e) => {
         if (!dragHasFiles(e)) return;
         e.preventDefault();
@@ -281,6 +285,16 @@
         reorderVideo(draggedVideoIndex, idx + (isAfter ? 1 : 0));
         li.classList.remove('drag-over-top', 'drag-over-bottom');
       });
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        window.api.showVideoContextMenu({
+          playlistId: playlist.id,
+          videoId: video.id,
+          isLocal: video.type === 'local',
+          canMoveUp: idx > 0,
+          canMoveDown: idx < playlist.videos.length - 1
+        });
+      });
 
       const indexEl = document.createElement('div');
       indexEl.className = 'video-index';
@@ -304,13 +318,21 @@
         <button class="icon-btn" data-action="up" title="Move up">↑</button>
         <button class="icon-btn" data-action="down" title="Move down">↓</button>
         <button class="icon-btn" data-action="edit" title="Edit">✎</button>
-        <button class="icon-btn danger" data-action="delete" title="Delete">✕</button>
+        ${video.type === 'local' ? '<button class="icon-btn danger-solid" data-action="deleteFromDisk" title="Delete file from disk">🗑</button>' : ''}
+        <button class="icon-btn danger" data-action="delete" title="Remove from playlist">✕</button>
       `;
       actionsEl.prepend(durationEl);
       actionsEl.querySelector('[data-action="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveVideo(idx, -1); });
       actionsEl.querySelector('[data-action="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveVideo(idx, 1); });
       actionsEl.querySelector('[data-action="edit"]').addEventListener('click', (e) => { e.stopPropagation(); openEditModal(idx); });
       actionsEl.querySelector('[data-action="delete"]').addEventListener('click', (e) => { e.stopPropagation(); deleteVideo(idx); });
+      const deleteFromDiskBtn = actionsEl.querySelector('[data-action="deleteFromDisk"]');
+      if (deleteFromDiskBtn) {
+        deleteFromDiskBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteLocalVideoFromDisk(playlist.id, video.id);
+        });
+      }
 
       li.appendChild(indexEl);
       li.appendChild(metaEl);
@@ -512,6 +534,60 @@
     } else if (currentVideoIndex > index) {
       currentVideoIndex -= 1;
     }
+    scheduleSave();
+    renderSidebar();
+    renderVideoList();
+    updateNowPlaying();
+  }
+
+  // Permanently deletes a local video's underlying file from disk, then
+  // cleans it out of every playlist that references it (not just this one —
+  // once the file is gone, every reference to it is equally broken).
+  async function deleteLocalVideoFromDisk(playlistId, videoId) {
+    const playlist = state.playlists.find(p => p.id === playlistId);
+    const video = playlist && playlist.videos.find(v => v.id === videoId);
+    if (!video || video.type !== 'local') return;
+
+    const ok = confirm(
+      'Permanently delete this file from your computer?\n\n' + video.filePath +
+      '\n\nThis cannot be undone, and it will be removed from every playlist that uses it.'
+    );
+    if (!ok) return;
+
+    const result = await window.api.deleteLocalFile(video.filePath);
+    if (!result || !result.ok) {
+      alert('Could not delete the file: ' + (result && result.error ? result.error : 'unknown error'));
+      return;
+    }
+
+    removeLocalVideoEverywhere(video.filePath);
+  }
+
+  function removeLocalVideoEverywhere(filePath) {
+    let activePlaylistLostCurrent = false;
+
+    state.playlists.forEach(p => {
+      const matchIndices = [];
+      p.videos.forEach((v, i) => { if (v.type === 'local' && v.filePath === filePath) matchIndices.push(i); });
+      if (matchIndices.length === 0) return;
+
+      if (p.id === activePlaylistId && currentVideoIndex >= 0) {
+        if (matchIndices.includes(currentVideoIndex)) {
+          activePlaylistLostCurrent = true;
+        } else {
+          const removedBefore = matchIndices.filter(i => i < currentVideoIndex).length;
+          currentVideoIndex -= removedBefore;
+        }
+      }
+
+      p.videos = p.videos.filter(v => !(v.type === 'local' && v.filePath === filePath));
+    });
+
+    if (activePlaylistLostCurrent) {
+      currentVideoIndex = -1;
+      resetPlayerToPlaceholder();
+    }
+
     scheduleSave();
     renderSidebar();
     renderVideoList();
@@ -889,7 +965,43 @@
 
   // ---------- Wiring ----------
 
+  // Routes the action chosen from a native right-click menu (built in the
+  // main process) back to the same functions the regular buttons use.
+  function handleContextMenuAction(payload) {
+    const { action, playlistId } = payload;
+
+    if (action === 'open' || action === 'rename' || action === 'deletePlaylist') {
+      if (playlistId !== activePlaylistId) selectPlaylist(playlistId);
+      if (action === 'rename') showRenameForm();
+      if (action === 'deletePlaylist') deletePlaylist();
+      return;
+    }
+
+    if (action === 'deleteFromDisk') {
+      deleteLocalVideoFromDisk(playlistId, payload.videoId);
+      return;
+    }
+
+    // Remaining actions (play/moveUp/moveDown/edit/remove) are only ever
+    // triggered from a row in the currently active playlist, since that's
+    // the only video list rendered on screen at any time.
+    const playlist = state.playlists.find(p => p.id === playlistId);
+    if (!playlist) return;
+    const index = playlist.videos.findIndex(v => v.id === payload.videoId);
+    if (index === -1) return;
+
+    switch (action) {
+      case 'play': playVideoAt(index); break;
+      case 'moveUp': moveVideo(index, -1); break;
+      case 'moveDown': moveVideo(index, 1); break;
+      case 'edit': openEditModal(index); break;
+      case 'remove': deleteVideo(index); break;
+    }
+  }
+
   function wireEvents() {
+    window.api.onContextMenuAction(handleContextMenuAction);
+
     document.getElementById('newPlaylistBtn').addEventListener('click', createPlaylist);
     document.getElementById('deletePlaylistBtn').addEventListener('click', deletePlaylist);
 

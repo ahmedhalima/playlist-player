@@ -16,5 +16,9 @@ contextBridge.exposeInMainWorld('api', {
       }
     } catch (e) {}
     return file && file.path ? file.path : null;
-  }
+  },
+  deleteLocalFile: (filePath) => ipcRenderer.invoke('file:deleteLocal', filePath),
+  showVideoContextMenu: (payload) => ipcRenderer.send('context-menu:video', payload),
+  showPlaylistContextMenu: (payload) => ipcRenderer.send('context-menu:playlist', payload),
+  onContextMenuAction: (callback) => ipcRenderer.on('context-menu-action', (event, action) => callback(action))
 });
